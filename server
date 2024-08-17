@@ -1,0 +1,63 @@
+import socket
+import pickle
+from game import Game
+
+
+class GameServer:
+    def __init__(self):
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.bind(('0.0.0.0', 9999))
+        self.server.listen(5)
+        self.game = Game(ultimate=True, max=True)
+        print("Server listening on port 9999")
+
+    def handle_client(self, client_socket):
+        print("Handling new client")
+        while True:
+            try:
+                data = client_socket.recv(4096)
+                if not data:
+                    print("Client disconnected")
+                    break
+
+                # Deserialize the data received
+                client_action = pickle.loads(data)
+                print(f"Received action: {client_action}")
+                self.process_action(client_action, client_socket)
+
+            except Exception as e:
+                print(f"Error during communication: {e}")
+                break
+
+        print("Closing client connection")
+        client_socket.close()
+
+    def process_action(self, action, client_socket):
+        xclick, yclick = action['position']
+        player = action['player']
+
+        if self.game.board.valid_sqr(xclick, yclick):
+            self.game.board.mark_sqr(xclick, yclick, player)
+            winner = self.game.board.check_draw_win()
+
+            # Send game state back to client
+            response = {
+                'board': self.game.board.get_state(),
+                'winner': winner
+            }
+            print(f"Sending response: {response}")
+            try:
+                client_socket.sendall(pickle.dumps(response))
+            except Exception as e:
+                print(f"Error sending response: {e}")
+
+    def start(self):
+        while True:
+            client_socket, addr = self.server.accept()
+            print(f"Accepted connection from {addr}")
+            self.handle_client(client_socket)
+
+
+if __name__ == '__main__':
+    server = GameServer()
+    server.start()
