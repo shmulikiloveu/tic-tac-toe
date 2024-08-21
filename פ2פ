@@ -1,0 +1,93 @@
+import pygame
+import sys
+import socket
+import threading
+from const import *
+from game import Game
+
+class P2PNetwork:
+    def __init__(self, host, port, is_listener=False):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if is_listener:
+            self.socket.bind((host, port))
+            self.socket.listen(1)
+            print("Waiting for connection...")
+            self.conn, self.addr = self.socket.accept()
+            print(f"Connected to {self.addr}")
+        else:
+            self.socket.connect((host, port))
+            self.conn = self.socket
+
+    def send_data(self, data):
+        self.conn.sendall(data.encode())
+
+    def receive_data(self):
+        return self.conn.recv(1024).decode()
+
+class Main:
+    def __init__(self, host, port, is_listener=False):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption('ULTIMATE TIC TAC TOE')
+        self.game = Game(ultimate=True, max=True)
+        self.network = P2PNetwork(host, port, is_listener)
+        self.player = 1 if is_listener else 2
+        threading.Thread(target=self.receive_move, daemon=True).start()
+
+    def receive_move(self):
+        while True:
+            move = self.network.receive_data()
+            xclick, yclick, player = map(int, move.split(','))
+            if self.game.board.valid_sqr(xclick, yclick):
+                self.game.board.mark_sqr(xclick, yclick, player)
+                self.game.board.draw_fig(self.screen, xclick, yclick)
+
+                winner = self.game.board.check_draw_win(self.screen)
+                if winner:
+                    self.game.board.manage_win(self.screen, winner, onmain=True)
+                    self.game.ultimate_winner(self.screen, winner)
+                pygame.display.update()
+
+    def mainloop(self):
+        screen = self.screen
+        game = self.game
+
+        self.screen.fill(BG_COLOR)
+        game.render_board(screen)
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN and game.playing:
+                    xclick, yclick = event.pos
+
+                    if game.board.valid_sqr(xclick, yclick):
+                        game.board.mark_sqr(xclick, yclick, game.player)
+                        game.board.draw_fig(screen, xclick, yclick)
+                        self.network.send_data(f'{xclick},{yclick},{game.player}')
+
+                        winner = game.board.check_draw_win(screen)
+                        if winner:
+                            game.board.manage_win(screen, winner, onmain=True)
+                            game.ultimate_winner(screen, winner)
+
+                        game.next_turn()
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        game.restart()
+                        self.screen.fill(BG_COLOR)
+                        game.render_board(screen)
+
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            pygame.display.update()
+
+if __name__ == '__main__':
+    # הגדר את המחשב הראשון כמאזין והשני כ-client:
+    is_listener = input("Are you the listener? (yes/no): ").lower() == 'yes'
+    host = 'localhost'  # או כתובת IP של המחשב
+    port = 5555
+
+    main = Main(host, port, is_listener)
+    main.mainloop()
