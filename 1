@@ -1,0 +1,111 @@
+import socket
+import threading
+import pygame
+import sys
+
+from const import *
+from game import Game
+
+class Network:
+    def __init__(self, host, port, listener):
+        self.host = host
+        self.port = port
+        self.listener = listener
+        self.conn = None
+        self.addr = None
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        if self.listener:
+            self.socket.bind((self.host, self.port))
+            self.socket.listen(1)
+            print(f"Waiting for a connection on {self.host}:{self.port}...")
+            self.conn, self.addr = self.socket.accept()
+            print(f"Connected to {self.addr}")
+        else:
+            self.socket.connect((self.host, self.port))
+            self.conn = self.socket
+            print(f"Connected to {self.host}:{self.port}")
+
+    def send(self, data):
+        self.conn.send(data.encode())
+
+    def receive(self):
+        return self.conn.recv(1024).decode()
+
+    def close(self):
+        self.conn.close()
+
+class Main:
+    def __init__(self, network):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption('ULTIMATE TIC TAC TOE')
+        self.game = Game(ultimate=True, max=True)
+        self.network = network
+
+    def mainloop(self):
+        screen = self.screen
+        game = self.game
+        network = self.network
+
+        self.screen.fill(BG_COLOR)
+        game.render_board(screen)
+
+        while True:
+            for event in pygame.event.get():
+                # click
+                if event.type == pygame.MOUSEBUTTONDOWN and game.playing:
+                    xclick, yclick = event.pos
+
+                    if game.board.valid_sqr(xclick, yclick):
+                        game.board.mark_sqr(xclick, yclick, game.player)
+                        game.board.draw_fig(screen, xclick, yclick)
+
+                        # send move to the opponent
+                        network.send(f"{xclick},{yclick},{game.player}")
+
+                        # ultimate winner?
+                        winner = game.board.check_draw_win(screen)
+                        if winner:
+                            game.board.manage_win(screen, winner, onmain=True)
+                            game.ultimate_winner(screen, winner)
+
+                        game.next_turn()
+
+                # receive move from the opponent
+                try:
+                    move = network.receive()
+                    if move:
+                        xclick, yclick, player = map(int, move.split(','))
+                        game.board.mark_sqr(xclick, yclick, player)
+                        game.board.draw_fig(screen, xclick, yclick)
+                        game.next_turn()
+                except:
+                    pass
+
+                # keypress
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        game.restart()
+                        self.screen.fill(BG_COLOR)
+                        game.render_board(screen)
+
+                # quit
+                if event.type == pygame.QUIT:
+                    network.close()
+                    pygame.quit()
+                    sys.exit()
+
+            pygame.display.update()
+
+if __name__ == '__main__':
+    # Input host and port
+    listener = input("Are you the listener? (yes/no): ").lower() == 'yes'
+    host = '0.0.0.0' if listener else input("Enter the host IP of the listener: ")
+    port = int(input("Enter the port: "))
+
+    # Create network connection
+    network = Network(host, port, listener)
+    
+    # Start the game
+    main = Main(network)
+    main.mainloop()
