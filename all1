@@ -1,3 +1,7 @@
+this is the  board:
+
+
+
 import pygame
 
 from const import *
@@ -247,6 +251,9 @@ class Board:
                     return self.squares[1][1]   
 
 
+this is the board_dim
+
+
 
 from const import *
 
@@ -259,6 +266,7 @@ class BoardDim:
         self.ycor = ycor 
 
 
+this is the const
 
 
 
@@ -278,6 +286,9 @@ DIM = 3
 
 
 
+
+
+this is the game
 
 
 
@@ -336,6 +347,9 @@ class Game:
 
 
 
+
+
+this is the main
 
 
 
